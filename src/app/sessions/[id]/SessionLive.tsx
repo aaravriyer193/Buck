@@ -419,13 +419,13 @@ function CancelButton({ sessionId }: { sessionId: string }) {
 }
 
 function ApprovalCard({ approval }: { approval: ApprovalRequest }) {
-  const [busy, setBusy] = useState<'approve' | 'deny' | null>(null);
-  async function decide(decision: 'approved' | 'denied') {
-    setBusy(decision === 'approved' ? 'approve' : 'deny');
+  const [busy, setBusy] = useState<'approve' | 'deny' | 'silence' | null>(null);
+  async function decide(decision: 'approved' | 'denied', dontAskAgain = false) {
+    setBusy(decision === 'approved' ? (dontAskAgain ? 'silence' : 'approve') : 'deny');
     await fetch(`/api/approvals/${approval.id}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ decision }),
+      body: JSON.stringify({ decision, dont_ask_again: dontAskAgain }),
     });
   }
   return (
@@ -443,12 +443,20 @@ function ApprovalCard({ approval }: { approval: ApprovalRequest }) {
             {JSON.stringify(approval.payload, null, 2)}
           </pre>
         )}
-        <div className="mt-6 flex gap-3">
+        <div className="mt-6 flex flex-wrap gap-3 items-center">
           <button onClick={() => decide('approved')} disabled={!!busy} className="btn btn-buck">
             {busy === 'approve' ? 'Approving…' : 'Approve'}
           </button>
           <button onClick={() => decide('denied')} disabled={!!busy} className="btn">
             {busy === 'deny' ? 'Denying…' : 'Deny & skip'}
+          </button>
+          <button
+            onClick={() => decide('approved', true)}
+            disabled={!!busy}
+            className="mono text-[10px] uppercase tracking-widest text-[var(--color-ink-faint)] hover:text-[var(--color-buck)] underline underline-offset-4 ml-auto"
+            title={`Approve and stop asking about "${approval.action_type}" actions in future sessions`}
+          >
+            {busy === 'silence' ? 'Saving…' : `Approve · don't ask again for ${approval.action_type}`}
           </button>
         </div>
       </PaperCard>

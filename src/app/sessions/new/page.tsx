@@ -19,7 +19,7 @@ export default async function NewSessionPage() {
     .eq('enabled', true)
     .order('service');
 
-  const enabledServices = (integrations ?? []).map((i) => i.service);
+  const enabledServices = Array.from(new Set((integrations ?? []).map((i) => i.service)));
 
   return (
     <div className="min-h-screen">

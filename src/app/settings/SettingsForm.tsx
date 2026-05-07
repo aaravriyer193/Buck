@@ -4,12 +4,22 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { PaperCard } from '@/components/ui/PaperCard';
 
+const APPROVAL_ACTIONS: { key: string; label: string; help: string }[] = [
+  { key: 'email_send',           label: 'Sending email',           help: 'Gmail, Resend, anything that hits an outbox.' },
+  { key: 'file_delete',          label: 'Deleting files',          help: 'Drive, Dropbox, GitHub file removals.' },
+  { key: 'payment',              label: 'Payments',                help: 'Charges, refunds, anything that moves money.' },
+  { key: 'calendar_invite',      label: 'Calendar invites',        help: 'Creating or editing calendar events.' },
+  { key: 'public_post',          label: 'Public posts & comments', help: 'Slack messages, GitHub comments, anything visible to others.' },
+  { key: 'destructive_db_write', label: 'Creates and updates',     help: 'Creating issues, repos, records, or rows.' },
+];
+
 interface Initial {
   display_name: string;
   notification_email: string;
   monthly_budget_usd: number;
   per_session_budget_usd: number;
   self_modify_mode: 'approval' | 'auto' | 'off';
+  require_approval_for: string[];
 }
 
 export function SettingsForm({ initial }: { initial: Initial }) {
@@ -17,6 +27,15 @@ export function SettingsForm({ initial }: { initial: Initial }) {
   const [vals, setVals] = useState(initial);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
+
+  function toggleAction(key: string) {
+    setVals((s) => ({
+      ...s,
+      require_approval_for: s.require_approval_for.includes(key)
+        ? s.require_approval_for.filter((k) => k !== key)
+        : [...s.require_approval_for, key],
+    }));
+  }
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -78,6 +97,67 @@ export function SettingsForm({ initial }: { initial: Initial }) {
             />
           </Field>
         </div>
+      </PaperCard>
+
+      <PaperCard>
+        <div className="flex items-baseline justify-between mb-2">
+          <h2 className="display text-2xl">Approvals</h2>
+          {vals.require_approval_for.length > 0 ? (
+            <button
+              type="button"
+              onClick={() => setVals((s) => ({ ...s, require_approval_for: [] }))}
+              className="mono text-[10px] uppercase tracking-widest text-[var(--color-ink-faint)] hover:text-[var(--color-danger)]"
+            >
+              Disable all →
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setVals((s) => ({ ...s, require_approval_for: APPROVAL_ACTIONS.map((a) => a.key) }))}
+              className="mono text-[10px] uppercase tracking-widest text-[var(--color-ink-faint)] hover:text-[var(--color-buck)]"
+            >
+              Enable all →
+            </button>
+          )}
+        </div>
+        <p className="text-[var(--color-ink-soft)] mb-4 leading-relaxed">
+          Buck pauses and asks before doing any of the things you check below. Anything unchecked,
+          he just does. If you&apos;re sleeping when he runs into a paused action, he&apos;ll skip
+          the task and note it in the diary — so leave on what you really want to be asked about.
+        </p>
+        <div className="space-y-2">
+          {APPROVAL_ACTIONS.map((a) => {
+            const on = vals.require_approval_for.includes(a.key);
+            return (
+              <label
+                key={a.key}
+                className="flex items-start gap-3 cursor-pointer p-3 border border-[var(--color-rule)] hover:bg-[var(--color-paper-deep)]"
+              >
+                <input
+                  type="checkbox"
+                  checked={on}
+                  onChange={() => toggleAction(a.key)}
+                  className="mt-1 accent-[var(--color-buck)]"
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <div className="serif">{a.label}</div>
+                    <div className="mono text-[10px] uppercase tracking-widest text-[var(--color-ink-faint)]">
+                      {on ? 'asks first' : 'auto'}
+                    </div>
+                  </div>
+                  <div className="text-sm text-[var(--color-ink-soft)] mt-0.5">{a.help}</div>
+                </div>
+              </label>
+            );
+          })}
+        </div>
+        {vals.require_approval_for.length === 0 && (
+          <p className="mt-4 mono text-[10px] uppercase tracking-widest text-[var(--color-warn)]">
+            ⚠ Buck will perform every action without asking. The token scopes you set are now
+            your only safety rail.
+          </p>
+        )}
       </PaperCard>
 
       <PaperCard>

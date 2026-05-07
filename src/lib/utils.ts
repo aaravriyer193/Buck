@@ -10,14 +10,32 @@ export function formatUSD(n: number, opts: { precision?: number } = {}) {
   return `$${n.toFixed(p)}`;
 }
 
+// =============================================================================
+// Hydration-safe date formatting
+// =============================================================================
+// `toLocaleString` formats differently on server vs client (server is UTC,
+// browser is local), which makes Next.js scream about hydration mismatches.
+// These helpers always render in UTC with a deterministic format so server and
+// client agree byte-for-byte.
+// =============================================================================
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
 export function formatDateTime(d: string | Date) {
   const date = typeof d === 'string' ? new Date(d) : d;
-  return date.toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
+  const month = MONTHS[date.getUTCMonth()];
+  const day = date.getUTCDate();
+  const hh = String(date.getUTCHours()).padStart(2, '0');
+  const mm = String(date.getUTCMinutes()).padStart(2, '0');
+  return `${month} ${day}, ${hh}:${mm}`;
+}
+
+export function formatTime(d: string | Date) {
+  const date = typeof d === 'string' ? new Date(d) : d;
+  const hh = String(date.getUTCHours()).padStart(2, '0');
+  const mm = String(date.getUTCMinutes()).padStart(2, '0');
+  const ss = String(date.getUTCSeconds()).padStart(2, '0');
+  return `${hh}:${mm}:${ss}`;
 }
 
 export function formatDuration(ms: number) {

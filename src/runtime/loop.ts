@@ -31,9 +31,8 @@ const MAX_ITERATIONS = 40;
 
 export async function agentLoop({ ctx, tools, stream }: AgentLoopArgs): Promise<void> {
   const taskList = ctx.tasks
-    .map((t, i) => `${i + 1}. ${t.title}${t.prompt ? `\n   Detail: ${t.prompt}` : ''}`)
+    .map((t, i) => `${i + 1}. [task_id: ${t.id}] ${t.title}${t.prompt ? `\n   Detail: ${t.prompt}` : ''}`)
     .join('\n');
-
   const messages: ChatMessage[] = [
     { role: 'system', content: ctx.promptMd },
     {

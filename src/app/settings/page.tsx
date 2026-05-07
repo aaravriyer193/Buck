@@ -32,6 +32,9 @@ export default async function SettingsPage() {
             monthly_budget_usd: Number(profile?.monthly_budget_usd ?? 100),
             per_session_budget_usd: Number(profile?.per_session_budget_usd ?? 5),
             self_modify_mode: (profile?.self_modify_mode ?? 'approval') as 'approval' | 'auto' | 'off',
+            require_approval_for: profile?.require_approval_for ?? [
+            'email_send','file_delete','payment','calendar_invite','public_post','destructive_db_write'
+            ],
           }}
         />
       </main>

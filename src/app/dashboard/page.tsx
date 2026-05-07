@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { getStamp, getGreeting } from '@/lib/greetings';
 import { createClient } from '@/lib/supabase/server';
 import { SiteHeader } from '@/components/buck/SiteHeader';
 import { PaperCard } from '@/components/ui/PaperCard';
@@ -55,9 +56,9 @@ export default async function DashboardPage() {
         {/* Greeting */}
         <div className="flex items-end justify-between mb-12 reveal">
           <div>
-            <Stamp>{nightOrDay()}</Stamp>
+            <Stamp>{getStamp()}</Stamp>
             <h1 className="display text-5xl mt-3 leading-tight">
-              {greeting()},{' '}
+              {getGreeting()},{' '}
               <em>{(profile?.display_name || user.email?.split('@')[0] || 'friend').split(' ')[0]}</em>.
             </h1>
           </div>

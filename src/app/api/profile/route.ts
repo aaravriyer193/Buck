@@ -8,6 +8,7 @@ const Body = z.object({
   monthly_budget_usd: z.number().min(0).max(10000).optional(),
   per_session_budget_usd: z.number().min(0).max(1000).optional(),
   self_modify_mode: z.enum(['approval', 'auto', 'off']).optional(),
+  require_approval_for: z.array(z.string()).optional(),  // ← new
 });
 
 export async function PATCH(request: Request) {

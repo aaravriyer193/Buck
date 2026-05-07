@@ -28,7 +28,6 @@ export async function orchestrateSession(sessionId: string): Promise<void> {
   }
 
   if (session.status !== 'queued') {
-    // Idempotency — don't restart a session that's running, ended, etc.
     return;
   }
 
@@ -59,20 +58,41 @@ export async function orchestrateSession(sessionId: string): Promise<void> {
   const monthlySpend = Number(monthlySpendRpc.data ?? 0);
   const monthlyRemaining = Math.max(0, (profile?.monthly_budget_usd ?? 100) - monthlySpend);
 
-  // Decrypt secrets and merge into env
+  // ===========================================================================
+  // !!! DEBUG ONLY — REMOVE BEFORE DEPLOYING !!!
+  // Logs decrypted secrets in plaintext. Useful when chasing the "Buck can't
+  // see GITHUB_PAT" class of bug; dangerous everywhere else.
+  // ===========================================================================
+  console.log('\n========== [BUCK DEBUG] orchestrator start ==========');
+  console.log('[buck:debug] session id:', sessionId);
+  console.log('[buck:debug] user id:', session.user_id);
+  console.log('[buck:debug] integrations rows from db:', (integrations ?? []).length);
+  for (const it of integrations ?? []) {
+    console.log(`[buck:debug]   - service=${it.service}, enabled=${it.enabled}, ciphertext_len=${it.secrets_encrypted?.length ?? 0}`);
+  }
+
   const integrationEnvs: Record<string, string> = {};
   const enabledServices: string[] = [];
   for (const it of integrations ?? []) {
     try {
       const secrets = decryptSecrets(it.secrets_encrypted);
+      console.log(`[buck:debug] decrypted ${it.service}:`);
+      for (const [k, v] of Object.entries(secrets)) {
+        console.log(`[buck:debug]   ${k} = ${v}  (length=${String(v).length})`);
+      }
       Object.assign(integrationEnvs, secrets);
       enabledServices.push(it.service);
     } catch (err) {
-      console.error(`Failed to decrypt secrets for ${it.service}:`, err);
+      console.error(`[buck:debug] FAILED to decrypt ${it.service}:`, err);
     }
   }
 
-  // Mark session running
+  console.log('[buck:debug] enabledServices:', enabledServices);
+  console.log('[buck:debug] env keys to inject:', Object.keys(integrationEnvs));
+  console.log('[buck:debug] full env map (PLAINTEXT):', integrationEnvs);
+  console.log('========== [BUCK DEBUG] booting sandbox ==========\n');
+  // ===========================================================================
+
   await supabase
     .from('sessions')
     .update({ status: 'running', started_at: new Date().toISOString() })
@@ -84,6 +104,26 @@ export async function orchestrateSession(sessionId: string): Promise<void> {
     timeoutMs: Number(process.env.E2B_DEFAULT_TIMEOUT_MS ?? 14400000),
   });
   setCurrentSandbox(sandbox);
+
+  // ===========================================================================
+  // !!! DEBUG ONLY — REMOVE BEFORE DEPLOYING !!!
+  // Verify env actually landed inside the sandbox process by reading it back.
+  // ===========================================================================
+  try {
+    const probe = await sandbox.runCode(
+      `console.log(JSON.stringify({
+        keys: Object.keys(process.env).filter(k => !k.startsWith('_') && !['PATH','HOME','HOSTNAME','PWD','NODE_VERSION','LANG','TERM','SHLVL','OLDPWD'].includes(k)),
+        github_pat_present: !!process.env.GITHUB_PAT,
+        github_pat_length: process.env.GITHUB_PAT ? process.env.GITHUB_PAT.length : 0,
+        github_pat_prefix: process.env.GITHUB_PAT ? process.env.GITHUB_PAT.slice(0, 12) : null
+      }));`,
+      { language: 'js' }
+    );
+    console.log('[buck:debug] sandbox env probe:', probe.logs.stdout.join(''));
+  } catch (err) {
+    console.error('[buck:debug] sandbox probe failed:', err);
+  }
+  // ===========================================================================
 
   let exitStatus: 'completed' | 'failed' | 'cancelled' | 'budget_halt' = 'completed';
   let errorText: string | null = null;
@@ -98,7 +138,7 @@ export async function orchestrateSession(sessionId: string): Promise<void> {
       enabledServices,
       perSessionBudgetUsd: profile?.per_session_budget_usd ?? 5,
       monthlyBudgetRemainingUsd: monthlyRemaining,
-      approvalActions: (process.env.BUCK_REQUIRE_APPROVAL_FOR ?? '').split(',').filter(Boolean),
+      approvalActions: profile?.require_approval_for ?? [],    
     });
   } catch (err) {
     const message = (err as Error).message;
@@ -114,9 +154,8 @@ export async function orchestrateSession(sessionId: string): Promise<void> {
       await sandbox.kill();
     } catch { /* ignore */ }
 
-    // Sandbox time billing
     const sandboxSeconds = (Date.now() - sandboxStart) / 1000;
-    const sandboxUnitCost = 0.0001; // TODO(buck): pull from E2B pricing API
+    const sandboxUnitCost = 0.0001;
     const sandboxCost = sandboxSeconds * sandboxUnitCost;
     await supabase.from('usage_events').insert({
       user_id: session.user_id,
@@ -129,7 +168,6 @@ export async function orchestrateSession(sessionId: string): Promise<void> {
     await supabase.rpc('increment_session_cost', { p_session_id: sessionId, p_delta: sandboxCost });
   }
 
-  // Finalize session
   await supabase
     .from('sessions')
     .update({
@@ -139,7 +177,6 @@ export async function orchestrateSession(sessionId: string): Promise<void> {
     })
     .eq('id', sessionId);
 
-  // Diary is written from inside the runtime (main.ts). Now run reflection.
   try {
     if ((profile?.self_modify_mode ?? 'approval') !== 'off') {
       await runReflection({
@@ -152,7 +189,6 @@ export async function orchestrateSession(sessionId: string): Promise<void> {
     console.error('reflection failed', err);
   }
 
-  // Wake-up email
   try {
     await sendWakeUpEmail(sessionId);
   } catch (err) {
