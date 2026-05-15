@@ -21,17 +21,14 @@ export interface EnvVarSpec {
 }
 
 export interface ToolSpec {
-  /** Function name Buck will call. e.g. "github.search_issues" */
   name: string;
   description: string;
-  /** JSON schema for the tool's arguments. */
   parameters: Record<string, unknown>;
-  /** True if this tool is destructive — surfaces in approval gate config. */
   destructive?: boolean;
 }
 
 export interface IntegrationManifest {
-  service: string;            // 'github', 'slack', etc.
+  service: string;
   display_name: string;
   category:
     | 'communication'
@@ -45,12 +42,12 @@ export interface IntegrationManifest {
     | 'misc';
   description: string;
   env_vars: EnvVarSpec[];
-  setup_instructions: string;  // markdown
+  setup_instructions: string;
   tools: ToolSpec[];
-  /** Color hint for the UI badge (CSS color). */
   badge_color?: string;
 }
 
+import { manifest as sandbox } from './sandbox';
 import { manifest as gmail } from './gmail';
 import { manifest as slack } from './slack';
 import { manifest as github } from './github';
@@ -63,9 +60,10 @@ import { manifest as resend } from './resend';
 import { manifest as firecrawl } from './firecrawl';
 
 export const ALL_INTEGRATIONS: IntegrationManifest[] = [
+  sandbox,        // ← Buck's own runtime, always-on, listed first
+  github,
   gmail,
   slack,
-  github,
   linear,
   notion,
   gdrive,

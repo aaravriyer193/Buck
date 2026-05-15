@@ -4,14 +4,36 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { PaperCard } from '@/components/ui/PaperCard';
 
+const MODEL_OPTIONS = [
+  { group: 'Recommended', models: [
+    { value: 'anthropic/claude-sonnet-4.6',           label: 'Claude Sonnet 4.6',  hint: 'sharpest reasoning · best for complex tasks' },
+    { value: 'openai/gpt-5',                      label: 'GPT-5',          hint: 'solid all-rounder · good tool use' },
+  ]},
+  { group: 'Cheerful', models: [
+    { value: 'z-ai/glm-5',                         label: 'GLM-5',            hint: 'Long running and cheap · default' },
+    { value: 'nvidia/nemotron-3-super-120b-a12b',   label: 'Nemotron 3',       hint: 'verbose, capable, very cheap' },
+    { value: 'meta-llama/llama-3.3-70b-instruct',   label: 'Llama 3.3 70B',    hint: 'open-weight workhorse' },
+  ]},
+];
+
 export function NewSessionForm({ canStart }: { canStart: boolean }) {
   const router = useRouter();
   const [taskList, setTaskList] = useState('');
   const [extraPrompt, setExtraPrompt] = useState('');
+  const [model, setModel] = useState('');
+  const [customModel, setCustomModel] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   const lines = taskList.split('\n').map((l) => l.trim()).filter(Boolean);
+
+  function normalize(s: string) {
+    return s
+      .replace(/[\u2018\u2019]/g, "'")
+      .replace(/[\u201C\u201D]/g, '"')
+      .replace(/\u00a0/g, ' ')
+      .trim();
+  }
 
   async function start(e: React.FormEvent) {
     e.preventDefault();
@@ -19,16 +41,28 @@ export function NewSessionForm({ canStart }: { canStart: boolean }) {
     setBusy(true);
     setErr(null);
     try {
+      const chosenModel =
+        model === '__custom__' ? (customModel || undefined) :
+        model || undefined;
+
       const res = await fetch('/api/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          task_titles: lines,
-          prompt: extraPrompt || undefined,
+          task_titles: lines.map(normalize),
+          prompt: extraPrompt ? normalize(extraPrompt) : undefined,
+          model: chosenModel,
         }),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'failed');
+      if (!res.ok) {
+        console.error('Session creation failed:', json);
+        throw new Error(
+          typeof json.issues === 'object'
+            ? `Validation failed: ${JSON.stringify(json.issues)}`
+            : json.error || 'failed'
+        );
+      }
       router.push(`/sessions/${json.id}`);
     } catch (e) {
       setErr((e as Error).message);
@@ -70,6 +104,44 @@ export function NewSessionForm({ canStart }: { canStart: boolean }) {
           />
         </div>
       </details>
+
+      {/* Model picker */}
+      <div className="mt-6">
+        <label className="mono text-xs uppercase tracking-widest text-[var(--color-ink-faint)] block mb-2">
+          Model
+        </label>
+        <select
+          value={model}
+          onChange={(e) => setModel(e.target.value)}
+          className="input mono text-sm"
+        >
+          <option value="">Use default</option>
+          {MODEL_OPTIONS.map((g) => (
+            <optgroup key={g.group} label={g.group}>
+              {g.models.map((m) => (
+                <option key={m.value} value={m.value}>
+                  {m.label} — {m.hint}
+                </option>
+              ))}
+            </optgroup>
+          ))}
+          <optgroup label="Custom">
+            <option value="__custom__">Other (paste OpenRouter slug)</option>
+          </optgroup>
+        </select>
+        {model === '__custom__' && (
+          <input
+            type="text"
+            value={customModel}
+            onChange={(e) => setCustomModel(e.target.value)}
+            placeholder="e.g. mistralai/mistral-large-2411"
+            className="input mt-2 mono text-sm"
+          />
+        )}
+        <p className="mt-1 text-xs text-[var(--color-ink-faint)]">
+          Sonnet 4 is sharper for complex tasks. GLM-5 and Nemotron are cheaper for simple ones.
+        </p>
+      </div>
 
       {err && (
         <p className="mt-4 mono text-xs uppercase tracking-widest text-[var(--color-danger)]">
